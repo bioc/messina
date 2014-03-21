@@ -1,0 +1,289 @@
+%\VignetteEngine{knitr::knitr}
+%\VignetteIndexEntry{Using Messina}
+%\VignetteDepends{messina,antiProfilesData}
+%\VignetteKeywords{messina,messinaSurv}
+%\VignettePackage{messina}
+
+\documentclass{article}
+
+<<style-knitr, eval=TRUE, echo=FALSE, results="asis">>=
+BiocStyle::latex()
+@
+
+\begin{document}
+
+<<setup, include=FALSE, cache=FALSE>>=
+library(knitr)
+opts_chunk$set(out.width="0.7\\maxwidth",fig.align="center")
+@
+
+\title{Using Messina}
+\author{Mark Pinese}
+
+\maketitle
+
+\tableofcontents
+
+
+\section{Introduction}
+
+Messina is a package of algorithms for generating optimal single-gene
+threshold classifiers. These classifiers are directly useful when using
+continuous data (eg. gene expression measurements) to develop diagnostic
+or prognostic tests that will be based on binary assays such as
+immunohistochemistry.
+
+Messina is also useful for the flexible detection of differential
+expression in the presence of outliers, either due to experimental
+variations or hidden sample heterogeneity. When used in this fashion,
+Messina can detect genes or proteins with biologically-interesting
+heterogeneous patterns of expression, that are missed by conventional
+statistics. Such heterogeneity in expression is a hallmark of sample
+subtypes, and Messina can be used to detect features that could be
+reflective of underlying, and undiscovered, sample subtypes.
+
+The original Messina algorithm for classification and differential
+expression analysis is described in the Messina paper \cite{Pinese:2009}.
+
+
+\section{Using Messina to construct optimal diagnostic classifiers}
+
+This section will illustrate how Messina can be used to identify single features
+(eg genes) that would be best suited to form the basis of a diagnostic test.
+
+\subsection{The problem}
+Translating gene expression data into a robust clinical test is challenging:
+\begin{enumerate}
+  \item{Although gene expression datasets typically measure the levels of many thousands
+    of genes, practical clinical diagnostic tests only measure a very small number of
+    markers (typically just one).}
+  \item{High-throughput gene expression data and clinical tests use very different 
+    measurement methods, so that a finding in one is not necessarily repeatable in the other.}
+  \item{Clinical samples are subject to much more varied handling than experimental
+    samples, requiring clinical tests to be very robust to handling variations.}
+\end{enumerate}
+Point (1) above means that although sophisticated classification algorithms can produce
+high-performance multi-feature classifiers on gene expression data, these classifiers
+are not translatable to a clinical test.  Special classifiers developed to work with
+very small numbers of genes are required.  Points (2) and (3) reflect that, in the translation
+of a laboratory result to a clinical diagnostic context, maximum robustness is desirable
+to give the test the best chance of performing satisfactorily in the less controlled
+clinical environment, using completely different measurement methods.
+
+Conventional classifiers (eg. SVM, kNN) are poorly suited to the problem of generating
+diagnostic tests, as they do not strongly control for the number of features used in the
+classifier.  Statistical tests (eg. t-test) work on a per-feature basis, but are not
+specifically designed for classification problems, and so do not produce optimally robust
+tests.  Messina was specifically designed to solve this problem of generating optimal 
+single-gene classifiers.
+
+\subsection{Example: Designing a colon cancer screening test}
+
+We use as an example the problem of distinguishing between colon biopsies of non-neoplastic
+tissue, and those containing colon cancer.  In this example, we are ultimately interested 
+in developing a screening test.  Therefore, the per-test cost should be low, and ideally
+the test should be so robust that it may also work in samples more conveniently accessed
+than tissue biopsies, such as peripheral blood.  Additionally, as the test will be a screen,
+we require that the sensitivity of the test be high, although we are willing to accept a
+lower specificity if it will gain us additional robustness.
+
+We use the colon cancer expression dataset available in Bioconductor package
+\Biocexptpkg{antiProfiles}.  This dataset has already been used to produce a high-performing
+diagnostic classifier, but it is based on the measurements of 542 Affymetrix probesets,
+and so would not be economical to use in the screening application we have in mind, as
+well as quite challenging to transfer between sites and technologies.
+
+We start by loading Messina and the data.
+<<class-loadlibs, message=FALSE>>=
+library(messina)
+library(antiProfilesData)
+data(apColonData)
+apColonData
+@
+
+The data contain a number of different sample classes.  For our purposes we are only
+interested in comparing tumour and normal samples.  We extract the expression data and class
+labels, and subset to just these types of interest.  Messina does not require gene filtering, 
+so we do not perform it at this stage, although in very large datasets this may be useful 
+to reduce runtimes. 
+<<class-prepdata>>=
+x = exprs(apColonData)
+y = pData(apColonData)$SubType
+
+sel = y %in% c("normal", "tumor")
+x = x[,sel]
+y = y[sel]
+@
+
+We are now ready to run the Messina algorithm.  As we are interested in a screening test,
+we desire a high test sensitivity, but are willing to accept a lower test specificity.
+We choose a minimum sensitivity requirement of 0.95, and a minimum specificity requirement
+of 0.85.  We now calculate the Messina fits, specifying that the "positive" class is 
+tumour.
+<<class-fit>>=
+fit.apColon = messina(x, y == "tumor", min_sens = 0.95, min_spec = 0.85, seed = 1234, silent = TRUE)
+@
+
+The result is a messinaClassResult S4 object with overloaded show and plot functions.
+<<class-show>>=
+fit.apColon
+@
+
+Here we see that Messina found \Sexpr{sum(fit.apColon@fits@summary$passed)} probesets
+that were suitable as the basis of threshold diagnostic classifiers for colon cancer.
+A summary of the best probesets (by margin) is given at the bottom of the show results.  This can 
+also be accessed directly, with more display options, using the messinaTopResults function.
+
+By default, Messina ranks features in decreasing order
+of their \emph{margin}, a concept borrowed from support vector machine theory.  
+The margin is a measure of how robust the classifier is to
+noise, and is equal to the distance between the performance limits of the threshold
+value.  These limits are the gene expression values beyond which the threshold cannot
+pass without the classifier no longer satisfying its user-supplied minimum performance
+requirements.  The distance between the threshold and either limit is an indication of
+how much error must be present in a gene expression measurement for the performance
+guarantee of a Messina classifier to be violated.  The greater the margin, the more
+robust the classifier.
+
+To illustrate the performance limits, threshold, and margin concepts, we plot the 
+Messina fit of the best probeset found.  We override the Messina default and set
+the plot type to ``point'' (vs the default of ``bar''), as the data are approximately log transformed.
+<<class-plot>>=
+plot(fit.apColon, i = 1, plot_type = "point")
+@
+
+This plot displays the expression of each sample as a coloured point, with the colour
+reflecting the sample's group: 0 for non-neoplastic tissue, and 1 for cancer.  The
+threshold that Messina selected as being optimal for separating cancer from normal is
+denoted by a solid black line, and on either side the dotted lines represent the 
+performance limits of the classifier.  If the level of error in expression measurement
+remains less than the distance between either dotted line and the threshold, the 
+classifier's minimum sensitivity and specificity requirements will be satisfied.  The
+distance between the two dotted lines is the margin.
+
+In this example, the top probe found by Messina could perfectly separate cancer and
+normal samples, with a very wide margin of approximately \Sexpr{round(max(fit.apColon@fits@summary$margin, na.rm = TRUE), 1)} units, or about \Sexpr{round(2^max(fit.apColon@fits@summary$margin, na.rm = TRUE)/10, 0)*10}-fold.
+As we move down the list of Messina results, the separation between cancer and normal
+samples progressively worsens, and the probesets become less suitable for devleopment into a diagnostic.  
+In this way, Messina provides a principled ranking of probesets to use as leads
+for the development of a diagnostic test, reporting the most robust leads first.
+
+<<class-ranked-plots,out.width="0.4\\maxwidth",fig.show="hold">>=
+plot(fit.apColon, i = c(1,2,10,50), plot_type = "point")
+@
+
+\section{Detecting differential expression in the presence of outliers}
+
+\subsection{Expression outliers}
+
+Messina provides a powerful framework for detecting differences in expression between
+two sample groups, even in the presence of `expression outliers'.  Here we define expression
+outliers for a given feature (eg. gene) as samples that have a level of signal very
+different from that of most of their class.  An example plot follows.
+
+<<de-outlier-example,echo=FALSE>>=
+library(ggplot2)
+temp.x = rep(c(0, 1), each = 6)
+set.seed(12345)
+temp.y = c(rnorm(6, 4, 0.5), rnorm(1, 4, 0.5), rnorm(5, 9, 0.5))
+temp.data = data.frame(y = temp.y, x = 1:length(temp.y), Group = factor(ifelse(temp.x, "Cancer", "Normal")))
+ggplot(temp.data, aes(y = y, x = x, fill = Group)) + geom_bar(stat = "identity") + ggtitle("Example of outlier expression") + xlab("Sample") + ylab("Expression in Sample") + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.text.y = element_blank())
+@
+
+This figure shows the expression of a fictional gene in two experimental groups, cancer and normal, each containing six samples.  In
+general, the cancer samples show increased expression from the normals, and most samples within each
+group are quite consistent in their signal.  However, the leftmost cancer sample is displaying a signal that
+is consistent with the normal samples.  This sample is an expression outlier.
+
+Expression outliers are common features in clinical data, in which unmeasured (and possibly even unknown)
+covariates can affect expression levels.  These covariates can be indicative of unknown substructure within
+a sample group: they can define sample subgroups.  Clinical data are also inevitably not as well controlled
+for various experimental factors as are laboratory-derived measurements, and so outliers may simply be a
+consequence of experimental error.  Regardless of whether the outliers are due to experimental error, or reflect new
+and unknown subgroups in the samples, it is valuable to have tools that can identify gene expression in a
+way that is robust to the presence of outliers.
+
+Unfortunately, the presence of outliers violates a core assumption of classical statistical tests -- that
+all samples within a group are sampled identically and are exchangable.  For this reason, even modest levels of
+expression outliers drastically reduce the power of classical tests to identify differential expression\cite{Pinese:2009}, 
+with resulting poor robustness to experimental artifacts, and the potential to ignore genes that have
+expression that is linked to an unknown subtype.  As these genes are of great interest in many differential
+expression analyses, there is a real need for methods that can reliably identify differential expression
+in the presence of outliers.  The following section will demonstrate the use of Messina in this task.
+
+\subsection{Example: Simulation and comparison to the t-test}
+
+Section under construction.
+
+\section{Identifying the best features to predict survival outcome}
+
+A new mode of Messina analysis the identification of optimal single features to
+use for prognosis, as opposed to the diagnosis case detailed previously.  The core
+concept is the same: to find single-feature threshold classifiers able to separate
+patients into two groups.  In the classification case above, the two groups were
+classes of patients, such as diseased and healthy.  In the prognosis case presented
+here, the two groups are defined by their survival time, as short survivors and
+long survivors.  In its survival mode, Messina aims to identify single features that
+can robustly separate patients who will likely experience an event quickly, from
+those who will likely go for some time without an event.
+
+In the classification case, the user inputs the minimum sensitivity and specificity
+that a Messina threshold classifier must satisfy, in effect creating a kind of
+cost-sensitive classification scheme.  The survival case is similar.  The user
+chooses an objective function that quantifies how different the survival times of
+two groups of patients is, and a minimum value of this function that all classifiers
+must be able to give on a test cohort.
+
+MessinaSurv currently has built-in three objective functions: `tau', `reltau', and
+`coxcoef'.  These are detailed in the documentation for the MessinaSurv function,
+and have differing properties.  In general, `tau' is a very stable objective, but
+penalizes cutoffs that will separate the cohort into very unbalanced subgroups.
+`reltau' and `coxcoef' do not have this penalty, but are more prone to unstable fits.
+`coxcoef' has an interpretation familiar to many working in the biomedical field,
+but is complex and by far the slowest objective function to calculate.  'tau` is a
+good first choice unless there is a strong reason to believe the cohort will contain a
+relatively small (< 25\%) subgroup of long- or short- survivors, but the user is
+encouraged to experiment with the different functions.  A future version of Messina
+may allow for user-supplied objectives.
+
+To illustrate the use of Messina on a survival problem, we load a (very small) subset of the TCGA
+KIRC expression data.
+<<surv-load>>=
+library(messina)
+library(survival)
+data(tcga_kirc_example)
+
+## The data are present as a matrix of expression values, and a Surv object of
+## survival times
+dim(kirc.exprs)
+kirc.surv
+@
+
+We then run messinaSurv on these data.  Note that messinaSurv is currently rather
+slow.  It is strongly recommended to use it in conjunction with doMC and as many
+cores as are available.  Note that there are only \Sexpr{nrow(kirc.exprs)} genes 
+in this dataset -- this very small number was chosen only to ensure that the vignette 
+executed quickly.  In practice, many thousands of genes may be assayed, and multiprocessing
+will be absolutely necessary.
+<<surv-fit>>=
+fit.surv = messinaSurv(kirc.exprs, kirc.surv, obj_func = "tau", obj_min = 0.6, parallel = FALSE, silent = TRUE)
+
+fit.surv
+@
+
+Plotting the fit.surv object produces a plot of the best feature found.
+<<surv-plot>>=
+plot(fit.surv, bootstrap_type = "ci")
+@
+
+
+\section{Session info}
+<<sessionInfo, eval=TRUE>>=
+sessionInfo()
+@
+
+%\bibliographystyle{plain}
+\bibliography{../REFERENCES}
+
+\end{document}
+
