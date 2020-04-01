@@ -107,9 +107,9 @@
 messina = function(x, y, min_sens, min_spec, f_train = 0.9, n_boot = 50, 
 	seed = NULL, progress = TRUE, silent = FALSE)
 {
-	if (class(x) == "ExpressionSet")
+	if ("ExpressionSet" %in% class(x))
 	{
-		if (require(Biobase) == FALSE)
+		if (requireNamespace(Biobase) == FALSE)
 		{
 			stop("Bioconductor package Biobase must be available to use data in ExpressionSet objects")
 		}

@@ -136,9 +136,9 @@ messinaSurv = function(x, y, obj_min, obj_func, min_group_frac = 0.1, f_train = 
 		}
 	}
 
-	if (class(x) == "ExpressionSet")
+	if ("ExpressionSet" %in% class(x))
 	{
-		if (require(Biobase) == FALSE)
+		if (requireNamespace(Biobase) == FALSE)
 		{
 			stop("Bioconductor package Biobase must be available to use data in ExpressionSet objects")
 		}

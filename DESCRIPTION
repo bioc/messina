@@ -1,7 +1,7 @@
 Package: messina
 Type: Package
 Title: Single-gene classifiers and outlier-resistant detection of
-        differential expression for two-group and survival problems.
+        differential expression for two-group and survival problems
 Version: 1.23.0
 Date: 2014-03-20
 Authors@R: c(person(given = "Mark", family = "Pinese", role = c("aut",
@@ -27,4 +27,4 @@ BuildDepends: roxygen2 (>= 3.1.0)
 VignetteBuilder: knitr
 Roxygen: list(wrap = TRUE)
 Author: Mark Pinese [aut], Mark Pinese [cre], Mark Pinese [cph]
-Maintainer: Mark Pinese <m.pinese@garvan.org.au>
+Maintainer: Mark Pinese <mpinese@ccia.org.au>

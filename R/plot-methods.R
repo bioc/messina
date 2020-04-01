@@ -359,7 +359,7 @@ messinaSurvObjPlot = function(object, i)
 	plot_data = data.frame(Objective = objective_surfaces$objective, Threshold = objective_surfaces$cutoff)
 
 	cutoff_frac_points = quantile(parameters@x[i,], probs = c(parameters@minimum_group_fraction, 1 - parameters@minimum_group_fraction))
-	cutoff_frac_ok = (parameters@x[i,] >= cutoff_frac_points[1]) && (parameters@x[i,] <= cutoff_frac_points[2])
+	cutoff_frac_ok = any((parameters@x[i,] >= cutoff_frac_points[1]) & (parameters@x[i,] <= cutoff_frac_points[2]))
 	
 	plot_data$Colour = c("darkgrey", "black")[cutoff_frac_ok + 1]
 	
