@@ -224,16 +224,16 @@ messinaSurv = function(x, y, obj_min, obj_func, min_group_frac = 0.1, f_train = 
 }
 
 
-#' @importFrom survival survConcordance.fit coxph
+#' @importFrom survival concordancefit coxph
 messinaSurvObjectiveFunc = function(x, y, func)
 {
 	if (func == "tau")
 	{
-		counts = survival::survConcordance.fit(y, x)
+		counts = survival::concordancefit(y, x)$count
 		agree = counts["concordant"]
 		disagree = counts["discordant"]
-		tied.time = counts["tied.time"]
-		tied.risk = counts["tied.risk"]
+		tied.time = counts["tied.y"]
+		tied.risk = counts["tied.x"]
 		tied = tied.time + tied.risk
 		tau = (agree+tied/2)/(agree+disagree+tied)
 
@@ -241,7 +241,7 @@ messinaSurvObjectiveFunc = function(x, y, func)
 	}
 	else if (func == "reltau")
 	{
-		counts = survival::survConcordance.fit(y, x)
+		counts = survival::concordancefit(y, x)$count
 		agree = counts["concordant"]
 		disagree = counts["discordant"]
 		reltau = agree/(agree+disagree)
